@@ -261,6 +261,8 @@ export const register: Register = (on: On, options: PluginOptions) => {
   let compacting = false;
 
   on('session.compact', async ($, event, next) => {
+    // 回退策略由 hook 负责：库在不安全条件下抛出异常，
+    // Claude Code 原生压缩始终作为可用的后备方案。
     try {
       const config = { ...configured, apiKey: await getApiKey($, configured) };
       const { result, messages } = await compactSession(event.messages, config, async (url, init) => {
@@ -290,6 +292,8 @@ export const register: Register = (on: On, options: PluginOptions) => {
   });
 
   on('turn.complete', async ($, event: TurnCompleteInput, next) => {
+    // `session.compact()` 可能再次触发 turn.complete 事件。
+    // 使用进行中标记，避免递归压缩或并发压缩。
     if (compacting) return next(event);
     try {
       const { context } = await $.session.usage();

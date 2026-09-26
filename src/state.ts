@@ -63,6 +63,8 @@ export function collectToolCalls(
   messages: readonly Message[],
   preserveRecentMessages: number,
 ): ToolCall[] {
+  // 工具结果可能出现在晚于 assistant 调用的 user 消息中。
+  // 先建立结果索引，再通过稳定的 tool_use_id 配对，不能依赖消息是否相邻。
   const results = new Map<string, { index: number; result: ToolResult }>();
   messages.forEach((message, index) => {
     for (const result of message.toolResults ?? []) {
@@ -229,6 +231,7 @@ export function fitState(
     perEntry[index] = now;
   };
 
+  // state 拟合过程是单向收缩的：先尽可能保留结构，只有在超出预算时才逐步丢弃细节。
   rebuild(INPUT_CHARS[0]);
   if (fits()) return fitted(history, tokens, 'full');
 
@@ -240,6 +243,8 @@ export function fitState(
   const pinned = (entry: HistoryEntry): boolean =>
     isPinned(entry.i, messages.length, options.preserveRecentMessages);
   const indices = history.map((_, index) => index);
+  // 优先压缩旧的非 pinned 条目，再处理最近消息和首条消息。
+  // 后两类消息只有在最后仍会参与检查，这样才能准确报告受保护上下文也无法适配预算的情况。
   const order = [
     ...indices.filter((index) => !pinned(history[index]!)),
     ...indices.filter((index) => pinned(history[index]!)),

@@ -18,6 +18,10 @@ The repository is both an npm package (`src/`) and a Claude Code plugin
 (`hooks/`, `.claude-plugin/`) that uses the package to replace Claude Code's
 built-in compaction summary with the original messages.
 
+## 项目导览与思维图
+
+想先建立整体心智模型，可阅读 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。其中包含模块关系图、一次压缩的时序图、核心概念和建议阅读顺序。
+
 ## How it works
 
 1. Every `tool_use` is paired with its `tool_result` by `tool_use_id`. Calls in

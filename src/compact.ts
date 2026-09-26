@@ -248,11 +248,16 @@ function count(decisions: readonly CallDecision[], reason: CallDecision['reason'
 }
 
 /**
- * Compacts a transcript by asking Jev, for every tool call outside the pinned
- * first and newest messages, whether the call and whether its result must
- * stay. The whole history (results omitted, fitted into `maxStateTokens`) is
- * sent as state with every batch of questions. Throws when Jev fails or the
- * history cannot be fitted; the caller decides whether to fall back.
+ * 压缩主流程：对于首条和最新消息之外的工具调用，由 Jev 判断调用本身及其结果是否需要保留。
+ * 整段历史（工具结果被省略，并适配到 `maxStateTokens`）会作为 state 随每一批问题发送。
+ *
+ * 这里刻意分离了三个职责：
+ * - `fitState`：构造仅供 Jev 使用、受 token 预算约束的历史视图；
+ * - Jev：只对调用和结果进行评分，不直接修改会话；
+ * - `applyDecisions`：将评分结果应用回原始消息对象。
+ *
+ * 这种分离保证了压缩只缩短上下文，不会重写用户/助手文本，也不会误把 Jev 的
+ * 简化 state 当作真正的会话历史返回。发生错误时抛出异常，由调用方决定如何回退。
  */
 export async function compact(
   messages: readonly Message[],
@@ -269,15 +274,19 @@ export async function compact(
   let batches: ToolCall[][] = [];
   const answers = new Map<string, CallAnswer>();
   if (candidates.length > 0) {
+    // state 只构造一次，并在每一批问题中复用，保证每个 Jev 决策都基于同一份完整会话。
     const state = fitState(messages, calls, resolved);
     fitted = state;
     batches = batchCalls(candidates, state.tokens, resolved);
+    // 各批次彼此独立，可以并发请求以降低总耗时；下面仍按原始调用顺序生成决策。
     const answered = await Promise.all(
       batches.map((batch) => askBatch(asker, state.state, batch)),
     );
     for (const map of answered) for (const [id, answer] of map) answers.set(id, answer);
   }
 
+  // 未被查询的调用通常是 pinned，或没有候选答案，因此默认保留。
+  // 这是以安全为优先的回退策略，不应该因为缺少答案而删除历史。
   const decisions = calls.map((call) =>
     decideCall(call, answers.get(call.id) ?? { keepCall: 1, keepResult: 1 }, resolved),
   );

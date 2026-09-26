@@ -35,7 +35,11 @@ export function buildJevRequest(
   };
 }
 
-/** Validates a Jev response body; throws on anything but an `answers` object. */
+/**
+ * 在响应进入压缩逻辑前校验不可信的 HTTP 返回值。
+ * 严格校验可以将格式错误或不完整的模型输出转换为普通异常，
+ * 从而让 Claude Code hook 使用安全的回退方案。
+ */
 export function parseJevResponse(
   status: number,
   ok: boolean,
@@ -62,7 +66,10 @@ export function parseJevResponse(
   return parsed as JevResponse;
 }
 
-/** The `noul` probability of one answer; throws when it is not there. */
+/**
+ * 提取一个数值类型的 `noul` 答案。
+ * 缺失答案或非有限数值都必须视为异常；如果静默当成 0，可能误删有价值的历史。
+ */
 export function noulAnswer(
   answers: Record<string, JevAnswer>,
   name: string,
